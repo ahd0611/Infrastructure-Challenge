@@ -1,0 +1,54 @@
+name: CI-CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/flask-app:${{ github.sha }} .
+          docker tag ${{ secrets.DOCKER_USERNAME }}/flask-app:${{ github.sha }} \
+                     ${{ secrets.DOCKER_USERNAME }}/flask-app:latest
+
+      - name: Push Docker Images
+        run: |
+          docker push ${{ secrets.DOCKER_USERNAME }}/flask-app:${{ github.sha }}
+          docker push ${{ secrets.DOCKER_USERNAME }}/flask-app:latest
+
+      - name: Update Deployment Image
+        run: |
+          kubectl set image deployment/flask-app \
+          flask-app=${{ secrets.DOCKER_USERNAME }}/flask-app:${{ github.sha }}
+
+      - name: Verify Rollout
+        run: |
+          kubectl rollout status deployment/flask-app
+
+      - name: Verify Deployment
+        run: |
+          echo "===== Deployments ====="
+          kubectl get deployment
+
+          echo "===== Pods ====="
+          kubectl get pods -o wide
+
+          echo "===== Services ====="
+          kubectl get svc
+
+          echo "===== Current Image ====="
+          kubectl describe deployment flask-app | grep Image
