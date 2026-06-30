@@ -1,4 +1,4 @@
-name: CI-CD Pipeline
+name: Build and Deploy
 
 on:
   push:
@@ -30,19 +30,28 @@ jobs:
           docker push ${{ secrets.DOCKER_USERNAME }}/flask-app:${{ github.sha }}
           docker push ${{ secrets.DOCKER_USERNAME }}/flask-app:latest
 
+      - name: Verify Kubernetes Connection
+        run: |
+          kubectl config current-context
+          kubectl get nodes
+
+      - name: Deploy Kubernetes Manifests
+        run: |
+          kubectl apply -f k8s/
+
       - name: Update Deployment Image
         run: |
           kubectl set image deployment/flask-app \
-          flask-app=${{ secrets.DOCKER_USERNAME }}/flask-app:${{ github.sha }}
+            flask-app=${{ secrets.DOCKER_USERNAME }}/flask-app:${{ github.sha }}
 
-      - name: Verify Rollout
+      - name: Wait for Rollout
         run: |
-          kubectl rollout status deployment/flask-app
+          kubectl rollout status deployment/flask-app --timeout=120s
 
       - name: Verify Deployment
         run: |
           echo "===== Deployments ====="
-          kubectl get deployment
+          kubectl get deployments
 
           echo "===== Pods ====="
           kubectl get pods -o wide
